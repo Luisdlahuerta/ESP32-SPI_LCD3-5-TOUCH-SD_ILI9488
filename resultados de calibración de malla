@@ -1,1 +1,6 @@
 
+// TUS VALORES DE MALLA 4x4
+const int CAL_X_MIN = 639;
+const int CAL_X_MAX = 3467;
+const int CAL_Y_MIN = 3387; // Invertido según tu test
+const int CAL_Y_MAX = 655;  // Invertido según tu test
