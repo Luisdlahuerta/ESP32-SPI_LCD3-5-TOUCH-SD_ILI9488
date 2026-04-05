@@ -1,1 +1,87 @@
 
+#include <SPI.h>
+#include <TFT_eSPI.h>
+#include <XPT2046_Touchscreen.h>
+#include <SD.h>
+
+// Pines de Control
+#define TOUCH_CS_PIN  21
+#define SD_CS_PIN     22
+
+TFT_eSPI tft = TFT_eSPI();
+XPT2046_Touchscreen touch(TOUCH_CS_PIN);
+
+// Variables de calibración (Tus resultados)
+int calXMin = 636, calXMax = 3509;
+int calYMin = 3402, calYMax = 609;
+
+void setup() {
+  Serial.begin(115200);
+  
+  // Inicializar Pantalla
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+
+  // Inicializar Táctil
+  touch.begin();
+  touch.setRotation(1);
+
+  // Inicializar SD (Solo para verificar que no bloquea el bus)
+  if (SD.begin(SD_CS_PIN)) {
+    tft.setTextColor(TFT_GREEN);
+    tft.drawString("SD OK", 10, 10, 2);
+  } else {
+    tft.setTextColor(TFT_RED);
+    tft.drawString("SD ERR", 10, 10, 2);
+  }
+
+  // Dibujar Interfaz de Prueba
+  tft.setTextColor(TFT_WHITE);
+  tft.drawCentreString("TEST DE PRECISION", 240, 40, 4);
+  
+  // Botón 1
+  tft.fillRect(50, 120, 150, 80, TFT_BLUE);
+  tft.drawRect(50, 120, 150, 80, TFT_WHITE);
+  tft.drawCentreString("BOTON A", 125, 150, 2);
+
+  // Botón 2
+  tft.fillRect(280, 120, 150, 80, TFT_MAROON);
+  tft.drawRect(280, 120, 150, 80, TFT_WHITE);
+  tft.drawCentreString("BOTON B", 355, 150, 2);
+  
+  tft.drawRect(10, 220, 460, 90, TFT_DARKGREY);
+  tft.drawCentreString("Estado: Esperando toque...", 240, 255, 2);
+}
+
+void loop() {
+  if (touch.touched()) {
+    TS_Point p = touch.getPoint();
+
+    // APLICANDO TU CALIBRACION EXACTA
+    int x = map(p.x, calXMin, calXMax, 0, 480);
+    int y = map(p.y, calYMin, calYMax, 0, 320);
+
+    // Dibujar puntero temporal en pantalla
+    tft.fillCircle(x, y, 2, TFT_YELLOW);
+
+    // Lógica de botones
+    tft.fillRect(20, 250, 440, 30, TFT_BLACK); // Limpiar texto anterior
+    tft.setTextColor(TFT_CYAN);
+
+    if (x > 50 && x < 200 && y > 120 && y < 200) {
+      tft.drawCentreString("¡PULSADO BOTON AZUL!", 240, 255, 2);
+      Serial.println("Click en A");
+    } 
+    else if (x > 280 && x < 430 && y > 120 && y < 200) {
+      tft.drawCentreString("¡PULSADO BOTON ROJO!", 240, 255, 2);
+      Serial.println("Click en B");
+    }
+    else {
+      tft.setTextColor(TFT_WHITE);
+      tft.drawCentreString("Fuera de los botones", 240, 255, 2);
+    }
+    
+    delay(50); // Suavizado
+  }
+}
