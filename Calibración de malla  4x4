@@ -1,1 +1,110 @@
 
+#include <SPI.h>
+#include <TFT_eSPI.h>
+#include <XPT2046_Touchscreen.h>
+
+#define TOUCH_CS_PIN 21
+XPT2046_Touchscreen touch(TOUCH_CS_PIN);
+TFT_eSPI tft = TFT_eSPI();
+
+// Configuración de la malla 4x4
+const int filas = 4;
+const int columnas = 4;
+const int totalPuntos = filas * columnas;
+
+int puntosX[totalPuntos];
+int puntosY[totalPuntos];
+int rawX[totalPuntos];
+int rawY[totalPuntos];
+int puntoActual = 0;
+
+void dibujarDiana(int x, int y, int num) {
+  tft.fillScreen(TFT_BLACK);
+  // Círculos concéntricos para precisión
+  tft.drawCircle(x, y, 20, TFT_DARKGREY);
+  tft.drawCircle(x, y, 10, TFT_RED);
+  tft.fillCircle(x, y, 2, TFT_WHITE);
+  // Líneas de eje
+  tft.drawLine(x - 25, y, x + 25, y, TFT_RED);
+  tft.drawLine(x, y - 25, x, y + 25, TFT_RED);
+
+  tft.setTextColor(TFT_WHITE);
+  tft.drawCentreString("CALIBRACION 16 PUNTOS (4x4)", 240, 140, 2);
+  tft.setCursor(210, 170);
+  tft.printf("Punto: %d/16", num + 1);
+}
+
+void setup() {
+  Serial.begin(115200);
+  tft.init();
+  tft.setRotation(1);
+  touch.begin();
+  touch.setRotation(1);
+
+  // Generar coordenadas de la pantalla para los 16 puntos
+  int margenX = 30;
+  int margenY = 30;
+  int stepX = (480 - (margenX * 2)) / (columnas - 1);
+  int stepY = (320 - (margenY * 2)) / (filas - 1);
+
+  for (int i = 0; i < filas; i++) {
+    for (int j = 0; j < columnas; j++) {
+      puntosX[i * columnas + j] = margenX + (j * stepX);
+      puntosY[i * columnas + j] = margenY + (i * stepY);
+    }
+  }
+
+  dibujarDiana(puntosX[0], puntosY[0], 0);
+}
+
+void loop() {
+  if (touch.touched()) {
+    TS_Point p = touch.getPoint();
+    
+    // Filtro rápido de 5 muestras para cada punto
+    long tx = 0, ty = 0;
+    for(int i=0; i<5; i++) {
+      TS_Point tmp = touch.getPoint();
+      tx += tmp.x; ty += tmp.y;
+    }
+    rawX[puntoActual] = tx / 5;
+    rawY[puntoActual] = ty / 5;
+
+    Serial.printf("Punto %d -> Pantalla(%d,%d) | Raw(%d,%d)\n", 
+                  puntoActual+1, puntosX[puntoActual], puntosY[puntoActual], rawX[puntoActual], rawY[puntoActual]);
+
+    puntoActual++;
+    delay(500);
+
+    if (puntoActual < totalPuntos) {
+      dibujarDiana(puntosX[puntoActual], puntosY[puntoActual], puntoActual);
+    } else {
+      procesarMalla();
+    }
+  }
+}
+
+void procesarMalla() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_GREEN);
+  tft.drawCentreString("MALLA COMPLETADA", 240, 100, 4);
+  
+  // Cálculo de promedios de los bordes para el MAP definitivo
+  // Columna izquierda (0, 4, 8, 12)
+  int xMin = (rawX[0] + rawX[4] + rawX[8] + rawX[12]) / 4;
+  // Columna derecha (3, 7, 11, 15)
+  int xMax = (rawX[3] + rawX[7] + rawX[11] + rawX[15]) / 4;
+  // Fila superior (0, 1, 2, 3)
+  int yMin = (rawY[0] + rawY[1] + rawY[2] + rawY[3]) / 4;
+  // Fila inferior (12, 13, 14, 15)
+  int yMax = (rawY[12] + rawY[13] + rawY[14] + rawY[15]) / 4;
+
+  Serial.println("\n--- RESULTADOS DE MALLA 4x4 ---");
+  Serial.println("// Valores promediados para eliminar desfase lateral:");
+  Serial.printf("int x = map(p.x, %d, %d, 0, 480);\n", xMin, xMax);
+  Serial.printf("int y = map(p.y, %d, %d, 0, 320);\n", yMin, yMax);
+  
+  tft.setTextColor(TFT_WHITE);
+  tft.drawCentreString("Copia los valores del Serial", 240, 160, 2);
+  while(1);
+}
