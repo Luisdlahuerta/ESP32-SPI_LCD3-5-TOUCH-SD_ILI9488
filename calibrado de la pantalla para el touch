@@ -1,1 +1,121 @@
 
+Gemini ha dicho
+Para hacer esto de forma profesional y que no tengas que recalibrar cada vez que apagues el ESP32, vamos a usar la librería Preferences.h (que es la evolución de la EEPROM en ESP32, mucho más robusta).
+
+El código dibujará los 5 puntos. Debes tocarlos en orden (A, B, C, D, E). Al terminar el quinto punto, el ESP32 calculará los promedios, los guardará en la memoria permanente y te soltará la línea de código lista para copiar y pegar.
+
+Código de Calibración con Autoguardado
+C++
+#include <SPI.h>
+#include <TFT_eSPI.h>
+#include <XPT2046_Touchscreen.h>
+#include <Preferences.h> // Reemplaza a la EEPROM en ESP32
+
+#define TOUCH_CS_PIN 21
+XPT2046_Touchscreen touch(TOUCH_CS_PIN);
+TFT_eSPI tft = TFT_eSPI();
+Preferences prefs;
+
+int p_rawX[5], p_rawY[5];
+int puntoActual = 0;
+const char* nombres[] = {"Superior Izq", "Superior Der", "Centro", "Inferior Izq", "Inferior Der"};
+
+void dibujarCruz(int x, int y, uint16_t color) {
+  tft.drawLine(x - 15, y, x + 15, y, color);
+  tft.drawLine(x, y - 15, x, y + 15, color);
+  tft.drawCircle(x, y, 10, color);
+}
+
+void setup() {
+  Serial.begin(115200);
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+  
+  touch.begin();
+  touch.setRotation(1);
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawCentreString("CALIBRACION DE 5 PUNTOS", 240, 140, 2);
+  tft.drawCentreString("Toca el centro de cada circulo rojo", 240, 170, 2);
+  
+  // Coordenadas de los 5 puntos en pantalla (píxeles)
+  dibujarCruz(30, 30, TFT_RED);     // A
+  dibujarCruz(450, 30, TFT_RED);    // B
+  dibujarCruz(240, 160, TFT_RED);   // C
+  dibujarCruz(30, 290, TFT_RED);    // D
+  dibujarCruz(450, 290, TFT_RED);   // E
+}
+
+void loop() {
+  if (touch.touched() && puntoActual < 5) {
+    TS_Point p = touch.getPoint();
+    p_rawX[puntoActual] = p.x;
+    p_rawY[puntoActual] = p.y;
+    
+    Serial.printf("Punto %d (%s) registrado: X=%d, Y=%d\n", puntoActual+1, nombres[puntoActual], p.x, p.y);
+    
+    puntoActual++;
+    delay(500); // Debounce para no registrar el mismo toque varias veces
+
+    if (puntoActual == 5) {
+      finalizarCalibracion();
+    }
+  }
+}
+
+void finalizarCalibracion() {
+  // Calculamos promedios para X_MIN, X_MAX, Y_MIN, Y_MAX
+  int xMin = (p_rawX[0] + p_rawX[3]) / 2; // Promedio izquierda
+  int xMax = (p_rawX[1] + p_rawX[4]) / 2; // Promedio derecha
+  int yMin = (p_rawY[0] + p_rawY[1]) / 2; // Promedio superior
+  int yMax = (p_rawY[3] + p_rawY[4]) / 2; // Promedio inferior
+
+  // Guardar en Memoria No Volátil (NVS)
+  prefs.begin("calib", false);
+  prefs.putInt("xMin", xMin);
+  prefs.putInt("xMax", xMax);
+  prefs.putInt("yMin", yMin);
+  prefs.putInt("yMax", yMax);
+  prefs.end();
+
+  tft.fillScreen(TFT_DARKGREEN);
+  tft.drawCentreString("¡CALIBRACION GUARDADA!", 240, 140, 4);
+  
+  // SALIDA POR SERIAL PARA COPIAR Y PEGAR
+  Serial.println("\n\n--- COPIA ESTA LINEA EN TU CODIGO ---");
+  Serial.printf("int x = map(p.x, %d, %d, 0, 480);\n", xMin, xMax);
+  Serial.printf("int y = map(p.y, %d, %d, 0, 320);\n", yMin, yMax);
+  Serial.println("-------------------------------------\n");
+}
+Cómo usar los datos guardados
+En tu código final, no necesitas volver a calibrar. Puedes leer los datos de la memoria así:
+
+C++
+Preferences prefs;
+int xMin, xMax, yMin, yMax;
+
+void setup() {
+  prefs.begin("calib", true); // Modo lectura
+  xMin = prefs.getInt("xMin", 200);  // 200 es el valor por defecto si falla
+  xMax = prefs.getInt("xMax", 3700);
+  yMin = prefs.getInt("yMin", 250);
+  yMax = prefs.getInt("yMax", 3800);
+  prefs.end();
+}
+
+void loop() {
+  if (touch.touched()) {
+    TS_Point p = touch.getPoint();
+    int x = map(p.x, xMin, xMax, 0, 480);
+    int y = map(p.y, yMin, yMax, 0, 320);
+    // ... tu lógica
+  }
+}
+Instrucciones:
+
+Carga el primer código.
+
+Toca los 5 puntos rojos con cuidado.
+
+Abre el Monitor Serie y verás las dos líneas del map listas. Copia esos números y ya los tienes para siempre.
