@@ -1,5 +1,4 @@
 
-Gemini ha dicho
 Para hacer esto de forma profesional y que no tengas que recalibrar cada vez que apagues el ESP32, vamos a usar la librería Preferences.h (que es la evolución de la EEPROM en ESP32, mucho más robusta).
 
 El código dibujará los 5 puntos. Debes tocarlos en orden (A, B, C, D, E). Al terminar el quinto punto, el ESP32 calculará los promedios, los guardará en la memoria permanente y te soltará la línea de código lista para copiar y pegar.
